@@ -4,18 +4,10 @@ O site usa o Supabase para autenticação, banco de dados e fotos. A aplicação
 
 ## Preparar o projeto
 
-1. No Supabase, abra **SQL Editor** e execute o conteúdo de `supabase/setup.sql`.
-2. Em **Authentication → Users**, crie o usuário de Guilherme ou Alice com e-mail e senha. O cadastro público pelo site não fica habilitado.
-3. Em **SQL Editor**, autorize o e-mail de login como administrador. Substitua o exemplo pelo e-mail que foi criado no passo anterior:
-
-   ```sql
-   insert into public.admin_users (email)
-   values (lower('SEU_EMAIL_DE_LOGIN'))
-   on conflict (email) do nothing;
-   ```
-
-4. Confirme que `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` estão configuradas nos Secrets do Replit.
-5. O site fica pronto para uso após a configuração das tabelas e do primeiro administrador. Não é criado endereço de entrega; ele deve ser preenchido no painel antes de ser habilitado para convidados.
+1. No Supabase, abra **SQL Editor** e execute o conteúdo de `supabase/setup.sql`. O script cria as tabelas, políticas RLS, função de leitura pública e bucket de imagens, além de autorizar `guilhenriquesilva10@gmail.com` como primeiro administrador.
+2. Em **Authentication → Users**, crie um usuário com o e-mail `guilhenriquesilva10@gmail.com` e defina a senha lá. O Supabase Auth não deve ser criado por inserção manual em `auth.users` nem por senha gravada em SQL.
+3. Confirme que `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` estão configuradas nos Secrets do Replit.
+4. Entre em `/admin` com o e-mail e a senha criados no passo 2. O site fica pronto após a configuração das tabelas e da conta. Não é criado endereço de entrega; ele deve ser preenchido no painel antes de ser habilitado para convidados.
 
 ## Acesso e privacidade
 
@@ -26,4 +18,4 @@ O site usa o Supabase para autenticação, banco de dados e fotos. A aplicação
 - Fotos ficam no bucket público `gift-photos`; somente administradores podem enviar, alterar ou excluir imagens.
 - A chave Pix inicial é `guilhenriquesilva10@gmail.com`, conforme informado para o site, e pode ser alterada no painel.
 
-Para conceder acesso a Alice ou a outro administrador, crie o usuário em **Authentication → Users** e adicione o mesmo e-mail à tabela `public.admin_users`. Para revogar o acesso, remova a linha correspondente dessa tabela.
+Para conceder acesso a Alice ou a outro administrador, crie o usuário em **Authentication → Users** e insira o mesmo e-mail em `public.admin_users` pelo SQL Editor. Para revogar o acesso, remova a linha correspondente dessa tabela.

@@ -50,6 +50,12 @@ create table if not exists public.admin_users (
   constraint admin_users_email_lowercase check (email = lower(email))
 );
 
+-- First authorized administrator. Create this email as an Auth user in Supabase
+-- Dashboard > Authentication > Users before signing into /admin.
+insert into public.admin_users (email)
+values ('guilhenriquesilva10@gmail.com')
+on conflict (email) do nothing;
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
