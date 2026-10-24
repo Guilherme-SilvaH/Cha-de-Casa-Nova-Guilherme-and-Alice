@@ -1,13 +1,15 @@
-export type GiftStatus = "available" | "fulfilled";
+export type GiftStatus = "available" | "purchased";
 
 export interface Gift {
   id: string;
   name: string;
   description: string | null;
   image_url: string | null;
+  purchase_url: string | null;
   category: string | null;
   suggested_price: number | null;
   status: GiftStatus;
+  purchased_by_guest: boolean;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -17,6 +19,7 @@ export interface GiftInput {
   name: string;
   description: string | null;
   image_url: string | null;
+  purchase_url: string | null;
   category: string | null;
   suggested_price: number | null;
   sort_order: number;

@@ -8,14 +8,55 @@ create table if not exists public.gifts (
   name text not null,
   description text,
   image_url text,
+  purchase_url text,
   category text,
   suggested_price numeric(10, 2),
   status text not null default 'available'
-    check (status in ('available', 'fulfilled')),
+    check (status in ('available', 'purchased')),
+  purchased_by_guest boolean not null default false,
   sort_order integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Migrate existing gift records without losing any other fields.
+alter table public.gifts add column if not exists purchase_url text;
+alter table public.gifts
+  add column if not exists purchased_by_guest boolean not null default false;
+
+do $$
+declare
+  status_constraint text;
+begin
+  for status_constraint in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.gifts'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%status%'
+  loop
+    execute format('alter table public.gifts drop constraint %I', status_constraint);
+  end loop;
+end;
+$$;
+
+update public.gifts
+set status = 'purchased'
+where status = 'fulfilled';
+
+alter table public.gifts
+  add constraint gifts_status_check
+  check (status in ('available', 'purchased'));
+
+alter table public.gifts
+  drop constraint if exists gifts_purchase_url_https;
+
+alter table public.gifts
+  add constraint gifts_purchase_url_https
+  check (
+    purchase_url is null
+    or purchase_url ~* '^https://([[:alnum:]-]+\.)+[[:alpha:]]{2,}(:[0-9]{1,5})?([/?#][^[:space:]]*)?$'
+  );
 
 create table if not exists public.site_settings (
   id integer primary key default 1 check (id = 1),
@@ -29,16 +70,16 @@ create table if not exists public.site_settings (
   hero_image_url text,
   about_image_url text,
   delivery_address jsonb not null default '{
-    "postal_code": "",
-    "street": "",
-    "number": "",
+    "postal_code": "13142-334",
+    "street": "Rua Alberto Belintani",
+    "number": "311",
     "complement": "",
     "neighborhood": "",
-    "city": "",
-    "state": "",
+    "city": "Paulínia",
+    "state": "São Paulo",
     "reference": ""
   }'::jsonb,
-  address_is_public boolean not null default false,
+  address_is_public boolean not null default true,
   pix_key text not null default 'guilhenriquesilva10@gmail.com',
   pix_text text not null default 'Se preferir, você também pode nos presentear com uma contribuição para ajudar a montar nosso novo lar. Agradecemos muito pelo carinho!',
   updated_at timestamptz not null default now()
@@ -49,6 +90,34 @@ create table if not exists public.admin_users (
   added_at timestamptz not null default now(),
   constraint admin_users_email_lowercase check (email = lower(email))
 );
+
+-- Populate the requested delivery address only when no address is already saved.
+-- This makes the provided address public without overwriting a host's existing edits.
+insert into public.site_settings as current_settings (
+  id,
+  delivery_address,
+  address_is_public
+)
+values (
+  1,
+  '{
+    "postal_code": "13142-334",
+    "street": "Rua Alberto Belintani",
+    "number": "311",
+    "complement": "",
+    "neighborhood": "",
+    "city": "Paulínia",
+    "state": "São Paulo",
+    "reference": ""
+  }'::jsonb,
+  true
+)
+on conflict (id) do update
+set
+  delivery_address = excluded.delivery_address,
+  address_is_public = true
+where length(btrim(coalesce(current_settings.delivery_address ->> 'street', ''))) = 0
+  and length(btrim(coalesce(current_settings.delivery_address ->> 'number', ''))) = 0;
 
 -- First authorized administrator. Create this email as an Auth user in Supabase
 -- Dashboard > Authentication > Users before signing into /admin.
@@ -119,7 +188,6 @@ as $$
           and length(btrim(coalesce(settings.delivery_address ->> 'postal_code', ''))) > 0
           and length(btrim(coalesce(settings.delivery_address ->> 'street', ''))) > 0
           and length(btrim(coalesce(settings.delivery_address ->> 'number', ''))) > 0
-          and length(btrim(coalesce(settings.delivery_address ->> 'neighborhood', ''))) > 0
           and length(btrim(coalesce(settings.delivery_address ->> 'city', ''))) > 0
           and length(btrim(coalesce(settings.delivery_address ->> 'state', ''))) > 0
         then settings.delivery_address
@@ -133,11 +201,33 @@ as $$
   where settings.id = 1;
 $$;
 
+create or replace function public.mark_gift_purchased(p_gift_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  updated_rows integer;
+begin
+  update public.gifts
+  set status = 'purchased',
+      purchased_by_guest = true
+  where id = p_gift_id
+    and status = 'available';
+
+  get diagnostics updated_rows = row_count;
+  return updated_rows = 1;
+end;
+$$;
+
 revoke all on function public.set_updated_at() from public, anon, authenticated;
 revoke all on function public.is_admin() from public;
 revoke all on function public.get_public_site_settings() from public;
+revoke all on function public.mark_gift_purchased(uuid) from public;
 grant execute on function public.is_admin() to anon, authenticated;
 grant execute on function public.get_public_site_settings() to anon, authenticated;
+grant execute on function public.mark_gift_purchased(uuid) to anon, authenticated;
 
 alter table public.gifts enable row level security;
 alter table public.site_settings enable row level security;

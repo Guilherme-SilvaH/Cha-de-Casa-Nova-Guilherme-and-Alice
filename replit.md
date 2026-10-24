@@ -33,9 +33,11 @@ Site de lista de presentes para o chá de casa nova, com convite público e gere
 
 ## Product
 
-- Public invite with searchable/filterable gifts, delivery details, and a copyable Pix key.
-- Admin login with gift management, status changes, ordering, summary counts, and editable site settings.
-- This is exclusively a housewarming list, not a wedding site. Do not invent an address; keep it hidden until configured and enabled.
+- Public invite with searchable/filterable gifts, secure external HTTPS purchase links, guest-reported purchased status, delivery details, and a copyable Pix key.
+- Admin login with gift management, purchase-link editing, available/purchased filters, status correction, ordering, summary counts, and editable site settings.
+- This is exclusively a housewarming list, not a wedding site. Do not add checkout or claim that the site verifies a store payment. Guest purchase reports are atomic declarations; only administrators can restore availability.
+- Track whether a purchased status came from a guest report so hosts can distinguish it from a manual correction; do not collect guest identity.
+- The requested delivery address is configured by `supabase/setup.sql` when the database address is blank, and remains editable/controllable through the existing public-address setting. Do not invent a complement, neighborhood, or reference.
 
 ## User preferences
 
@@ -43,7 +45,7 @@ Site de lista de presentes para o chá de casa nova, com convite público e gere
 
 ## Gotchas
 
-- Run `supabase/setup.sql` in the connected Supabase project's SQL Editor and add each administrator to `public.admin_users` before using `/admin`.
+- Run `supabase/setup.sql` in the connected Supabase project's SQL Editor after schema changes; it preserves existing gifts, converts `fulfilled` statuses to `purchased`, and installs the atomic public purchase function. Add each administrator to `public.admin_users` before using `/admin`.
 - Do not put a Supabase `service_role` key in this frontend.
 
 ## Pointers

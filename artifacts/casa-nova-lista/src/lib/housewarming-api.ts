@@ -135,12 +135,20 @@ export async function setGiftStatus(
 ): Promise<Gift> {
   const { data, error } = await getSupabase()
     .from("gifts")
-    .update({ status })
+    .update({ status, purchased_by_guest: false })
     .eq("id", id)
     .select("*")
     .single();
   throwIfError(error);
   return data as Gift;
+}
+
+export async function markGiftPurchased(id: string): Promise<boolean> {
+  const { data, error } = await getSupabase().rpc("mark_gift_purchased", {
+    p_gift_id: id,
+  });
+  throwIfError(error);
+  return data === true;
 }
 
 export async function saveSiteSettings(
@@ -293,6 +301,19 @@ export function useSetGiftStatus() {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: GiftStatus }) =>
       setGiftStatus(id, status),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.adminGifts }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.publicGifts }),
+      ]);
+    },
+  });
+}
+
+export function useMarkGiftPurchased() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: markGiftPurchased,
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.adminGifts }),

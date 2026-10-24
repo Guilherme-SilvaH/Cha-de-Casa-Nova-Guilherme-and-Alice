@@ -4,8 +4,8 @@ import homePhoto from "@assets/generated_images/casa-nova-interior.jpg";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   ArrowDown, ArrowUp, Check, ChevronDown, Copy, Heart, Home,
-  ImagePlus, KeyRound, LoaderCircle, LockKeyhole, LogOut, Mail, MapPin,
-  Pencil, Plus, Search, Settings2, Sparkles, Trash2, X,
+  ExternalLink, ImagePlus, KeyRound, LoaderCircle, LockKeyhole, LogOut,
+  Mail, MapPin, Pencil, Plus, Search, Settings2, Sparkles, Trash2, X,
 } from "lucide-react";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Toaster } from "@/components/ui/toaster";
@@ -13,7 +13,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Form } from "@/components/ui/form";
 import {
   useAdminGifts, useAdminSession, useAdminSettings, useDeleteGift,
-  usePublicGifts, usePublicSettings, useSaveGift, useSaveSiteSettings,
+  useMarkGiftPurchased, usePublicGifts, usePublicSettings, useSaveGift, useSaveSiteSettings,
   useSetGiftStatus, useSignInAdmin, useSignOutAdmin, useUploadGiftPhoto,
 } from "@/lib/housewarming-api";
 import type { DeliveryAddress, Gift, GiftInput, SiteSettings } from "@/lib/housewarming-types";
@@ -26,7 +26,18 @@ const pixFallback = "Se preferir, você também pode nos presentear com uma cont
 const emptyAddress: DeliveryAddress = { postal_code: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "", reference: "" };
 
 function SiteHeader({ hosts, admin = false }: { hosts: string; admin?: boolean }) {
-  return <header className="site-header"><a className="brand-mark" href="/" aria-label="Página inicial" data-testid="link-home"><span className="brand-icon"><Home size={17} strokeWidth={1.6}/></span><span><b>Casa Nova</b><small data-testid="text-hosts">{hosts || "Guilherme & Alice"}</small></span></a><nav><a href={admin ? "/" : "#presentes"} data-testid="link-primary-nav">{admin ? "Ver convite" : "Lista de presentes"}</a>{!admin && <a href="#entrega" data-testid="link-delivery-nav">Como entregar</a>}<a className="nav-admin" href="/admin" data-testid="link-admin">{admin ? "Área dos anfitriões" : "Anfitriões"}</a></nav></header>;
+  return <header className="site-header"><a className="brand-mark" href="/" aria-label="Página inicial" data-testid="link-home"><span className="brand-icon"><Home size={17} strokeWidth={1.6}/></span><span><b>Casa Nova</b><small data-testid="text-hosts">{hosts || "Guilherme & Alice"}</small></span></a><nav><a href={admin ? "/" : "#presentes"} data-testid="link-primary-nav">{admin ? "Ver convite" : "Lista de presentes"}</a>{!admin && <a href="#entrega" data-testid="link-delivery-nav">Endereço</a>}<a className="nav-admin" href="/admin" data-testid="link-admin">{admin ? "Área dos anfitriões" : "Anfitriões"}</a></nav></header>;
+}
+
+function safeHttpsUrl(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "https:" || !url.hostname || url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function LoadingState({ label = "Carregando..." }: { label?: string }) {
@@ -40,15 +51,65 @@ function PublicPage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Todas as categorias");
   const [copied, setCopied] = useState<"address" | "pix" | "">("");
+  const [copyError, setCopyError] = useState<{ kind: "address" | "pix"; message: string } | null>(null);
+  const [giftToConfirm, setGiftToConfirm] = useState<Gift | null>(null);
+  const [purchaseFeedback, setPurchaseFeedback] = useState<{ kind: "success" | "conflict" | "error"; message: string } | null>(null);
+  const markPurchased = useMarkGiftPurchased();
   const gifts = giftsQuery.data ?? [];
   const categories = useMemo(() => Array.from(new Set(gifts.map(g => g.category?.trim()).filter((value): value is string => Boolean(value)))), [gifts]);
   const filteredGifts = gifts.filter(gift => (!search || `${gift.name} ${gift.description ?? ""} ${gift.category ?? ""}`.toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR"))) && (category === "Todas as categorias" || gift.category === category));
   const heroUrl = settings?.hero_image_url || homePhoto;
   const copyValue = async (kind: "address" | "pix", value: string) => {
-    try { await navigator.clipboard.writeText(value); setCopied(kind); window.setTimeout(() => setCopied(""), 2200); } catch { setCopied(""); }
+    setCopyError(null);
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
+      else {
+        const field = document.createElement("textarea");
+        field.value = value;
+        field.style.position = "fixed";
+        field.style.opacity = "0";
+        document.body.appendChild(field);
+        field.select();
+        const copiedSuccessfully = document.execCommand("copy");
+        field.remove();
+        if (!copiedSuccessfully) throw new Error("Não foi possível copiar.");
+      }
+      setCopied(kind);
+      window.setTimeout(() => setCopied(""), 3500);
+    } catch {
+      setCopied("");
+      setCopyError({
+        kind,
+        message: kind === "address" ? "Não foi possível copiar o endereço. Tente novamente." : "Não foi possível copiar a chave Pix. Tente novamente.",
+      });
+    }
+  };
+  const confirmPurchased = async () => {
+    if (!giftToConfirm || markPurchased.isPending) return;
+    const gift = giftToConfirm;
+    setPurchaseFeedback(null);
+    try {
+      const changed = await markPurchased.mutateAsync(gift.id);
+      setGiftToConfirm(null);
+      setPurchaseFeedback(changed
+        ? { kind: "success", message: "Obrigado pelo carinho! Este presente foi marcado como comprado. Ficamos muito felizes por você fazer parte desse momento." }
+        : { kind: "conflict", message: "Este presente acabou de ser marcado como comprado. Obrigado pelo carinho!" });
+    } catch (error) {
+      setPurchaseFeedback({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Não foi possível registrar sua escolha. Tente novamente.",
+      });
+    }
   };
   const address = settings?.delivery_address;
-  const addressText = address ? [address.street, address.number, address.complement, address.neighborhood, [address.city, address.state].filter(Boolean).join(" / "), address.postal_code, address.reference && `Referência: ${address.reference}`].filter(Boolean).join(", ") : "";
+  const addressText = address ? [
+    [address.street, address.number].filter(Boolean).join(", "),
+    address.postal_code ? `CEP: ${address.postal_code}` : "",
+    [address.city, address.state].filter(Boolean).join(" — "),
+    address.complement ? `Complemento: ${address.complement}` : "",
+    address.neighborhood ? `Bairro: ${address.neighborhood}` : "",
+    address.reference ? `Referência: ${address.reference}` : "",
+  ].filter(Boolean).join("\n") : "";
   return <div className="public-page">
     <SiteHeader hosts={settings?.hosts ?? "Guilherme & Alice"}/>
     {settingsQuery.isLoading ? <div className="public-loading" data-testid="status-public-settings-loading"><LoadingState label="Preparando nosso convite"/></div> : settingsQuery.isError ? <div className="notice error-notice" data-testid="state-public-settings-error"><p>Não foi possível carregar o convite agora.</p><button className="button button-outline" data-testid="button-retry-public-settings" onClick={() => void settingsQuery.refetch()}>Tentar novamente</button></div> :
@@ -71,14 +132,20 @@ function PublicPage() {
       </section>
       <section className="gift-section" id="presentes"><div className="section-index">02 <span>—</span> COM UM POUCO DE CADA UM</div>
         <div className="gift-heading"><div><span className="eyebrow">ESCOLHIDOS PARA O NOSSO DIA A DIA</span><h2>Nossa lista de presentes</h2></div><p>Cada escolha ajuda a fazer deste espaço, casa.</p></div>
+        <div className="gift-instructions" data-testid="section-gift-instructions"><div className="instructions-mark"><Heart size={17}/></div><div className="instructions-copy"><h3 data-testid="text-gift-instructions-title">Como escolher e comprar seu presente</h3><p data-testid="text-gift-instructions-intro">Preparamos esta lista com carinho para facilitar a escolha do seu presente para nossa casa nova.</p><ol><li><b>Escolha seu presente:</b> navegue pela lista e encontre o item que deseja nos dar.</li><li><b>Compre do seu jeito:</b> se o presente tiver um botão ‘Comprar presente’, clique nele para abrir a loja e realizar a compra diretamente no site da loja. O pagamento, o frete e a entrega são realizados conforme as condições da própria loja.</li><li><b>Avise que já comprou:</b> depois de concluir a compra, volte a esta página e clique em ‘Já comprei este presente’. Assim, o item sairá da lista para evitar que outras pessoas pensem que ainda está disponível.</li><li><b>Confira o endereço:</b> antes de finalizar a compra, utilize o endereço de entrega informado nesta página e confirme se a loja aceita a entrega no local.</li></ol><p data-testid="text-gift-instructions-note">Você também pode comprar o presente em uma loja física ou em outro site. Nesse caso, basta voltar aqui e clicar em ‘Já comprei este presente’.</p><p className="instructions-closing" data-testid="text-gift-instructions-closing">O mais importante é o carinho de fazer parte desse momento com a gente!</p></div></div>
+        {purchaseFeedback && <div className={`purchase-feedback ${purchaseFeedback.kind}`} role={purchaseFeedback.kind === "success" ? "status" : "alert"} data-testid={`status-public-purchase-${purchaseFeedback.kind}`}>{purchaseFeedback.message}</div>}
         <div className="gift-tools"><label className="search-field"><Search size={17}/><input aria-label="Buscar presente" data-testid="input-public-search" placeholder="O que você procura?" value={search} onChange={e => setSearch(e.target.value)}/></label><label className="select-field"><select aria-label="Filtrar por categoria" data-testid="select-public-category" value={category} onChange={e => setCategory(e.target.value)}><option>Todas as categorias</option>{categories.map(cat => <option key={cat}>{cat}</option>)}</select><ChevronDown size={15}/></label><span className="results-count" data-testid="text-public-result-count">{filteredGifts.length} {filteredGifts.length === 1 ? "item" : "itens"}</span></div>
-        {giftsQuery.isLoading ? <div className="gift-grid" data-testid="status-public-gifts-loading">{[1,2,3,4].map(i => <div className="gift-skeleton" key={i}><span/><b/><i/></div>)}</div> : giftsQuery.isError ? <div className="empty-state" data-testid="state-public-gifts-error"><h3>A lista não carregou</h3><p data-testid="text-public-gifts-error">Não conseguimos buscar os presentes neste momento.</p><button className="button button-outline" data-testid="button-retry-public-gifts" onClick={() => void giftsQuery.refetch()}>Tentar novamente</button></div> : filteredGifts.length ? <div className="gift-grid" data-testid="list-public-gifts">{filteredGifts.map(gift => <article className="gift-card" key={gift.id} data-testid={`card-gift-${gift.id}`}><div className="gift-photo">{gift.image_url ? <img src={gift.image_url} alt={gift.name} data-testid={`image-gift-${gift.id}`}/> : <div className="gift-placeholder"><Home size={26} strokeWidth={1.2}/><span>para o nosso lar</span></div>}<span className="gift-category" data-testid={`text-gift-category-${gift.id}`}>{gift.category || "Casa"}</span></div><div className="gift-card-content"><div><h3 data-testid={`text-public-gift-name-${gift.id}`}>{gift.name}</h3>{gift.description && <p data-testid={`text-public-gift-description-${gift.id}`}>{gift.description}</p>}</div>{gift.suggested_price != null && <span className="gift-price" data-testid={`text-public-gift-price-${gift.id}`}>{gift.suggested_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>}</div></article>)}</div> : <div className="empty-state" data-testid="state-public-gifts-empty"><span className="empty-mark"><Heart size={19}/></span><h3>{gifts.length ? "Nenhum item encontrado" : "Nossa lista está sendo preparada"}</h3><p>{gifts.length ? "Tente ajustar sua busca ou categoria." : "Em breve compartilharemos algumas ideias para o nosso novo lar."}</p>{gifts.length > 0 && <button className="text-button" data-testid="button-clear-public-filters" onClick={() => { setSearch(""); setCategory("Todas as categorias"); }}>Limpar filtros</button>}</div>}
+        {giftsQuery.isLoading ? <div className="gift-grid" data-testid="status-public-gifts-loading">{[1,2,3,4].map(i => <div className="gift-skeleton" key={i}><span/><b/><i/></div>)}</div> : giftsQuery.isError ? <div className="empty-state" data-testid="state-public-gifts-error"><h3>A lista não carregou</h3><p data-testid="text-public-gifts-error">Não conseguimos buscar os presentes neste momento.</p><button className="button button-outline" data-testid="button-retry-public-gifts" onClick={() => void giftsQuery.refetch()}>Tentar novamente</button></div> : filteredGifts.length ? <div className="gift-grid" data-testid="list-public-gifts">{filteredGifts.map(gift => {
+          const purchaseUrl = safeHttpsUrl(gift.purchase_url);
+          return <article className="gift-card" key={gift.id} data-testid={`card-gift-${gift.id}`}><div className="gift-photo">{gift.image_url ? <img src={gift.image_url} alt={gift.name} data-testid={`image-gift-${gift.id}`}/> : <div className="gift-placeholder"><Home size={26} strokeWidth={1.2}/><span>para o nosso lar</span></div>}<span className="gift-category" data-testid={`text-gift-category-${gift.id}`}>{gift.category || "Casa"}</span></div><div className="gift-card-content"><div><h3 data-testid={`text-public-gift-name-${gift.id}`}>{gift.name}</h3>{gift.description && <p data-testid={`text-public-gift-description-${gift.id}`}>{gift.description}</p>}</div>{gift.suggested_price != null && <span className="gift-price" data-testid={`text-public-gift-price-${gift.id}`}>{gift.suggested_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>}</div><div className="gift-card-actions">{purchaseUrl && <a className="button button-outline gift-store-link" href={purchaseUrl} target="_blank" rel="noopener noreferrer" data-testid={`link-purchase-gift-${gift.id}`}>Comprar presente <ExternalLink size={14}/></a>}<button className="button button-dark gift-claim-button" data-testid={`button-claim-gift-${gift.id}`} onClick={() => { setPurchaseFeedback(null); setGiftToConfirm(gift); }}><Check size={15}/> Já comprei este presente</button></div></article>;
+        })}</div> : <div className="empty-state" data-testid="state-public-gifts-empty"><span className="empty-mark"><Heart size={19}/></span><h3>{gifts.length ? "Nenhum item encontrado" : "Nossa lista está sendo preparada"}</h3><p>{gifts.length ? "Tente ajustar sua busca ou categoria." : "Em breve compartilharemos algumas ideias para o nosso novo lar."}</p>{gifts.length > 0 && <button className="text-button" data-testid="button-clear-public-filters" onClick={() => { setSearch(""); setCategory("Todas as categorias"); }}>Limpar filtros</button>}</div>}
       </section>
-      <section className="delivery-section" id="entrega"><div className="delivery-inner"><div className="section-index">03 <span>—</span> UM JEITO DE CHEGAR ATÉ NÓS</div><div className="delivery-grid"><div><span className="eyebrow">SE QUISER NOS VISITAR</span><h2>Como entregar seu presente</h2><p data-testid="text-delivery-intro">Se você escolher um presente físico, aqui estão as informações para a entrega no nosso novo lar.</p>{address && <div className="address-box" data-testid="address-delivery"><MapPin size={19}/><div><b>Endereço para entrega</b><p data-testid="text-public-address">{addressText}</p></div>{addressText && <button className="icon-button copy-button" data-testid="button-copy-address" aria-label="Copiar endereço" onClick={() => void copyValue("address", addressText)}>{copied === "address" ? <Check size={17}/> : <Copy size={17}/>}</button>}</div>}{copied === "address" && <span className="copy-confirm" data-testid="status-address-copied">Endereço copiado</span>}</div><div className="delivery-side"><span className="decor-number">01</span><p>O mais importante é ter você fazendo parte desse começo.</p><span className="side-rule"/></div></div></div></section>
-      <section className="pix-section"><div className="pix-mark" aria-hidden="true"><span>G</span><i>&</i><span>A</span></div><div className="pix-copy"><span className="eyebrow">UM GESTO QUE VIRA LAR</span><h2>Prefere contribuir via Pix?</h2><p data-testid="text-pix-copy">{settings?.pix_text || pixFallback}</p>{settings?.pix_key ? <div className="pix-key-row"><span className="pix-key" data-testid="text-public-pix-key">{settings.pix_key}</span><button className="button button-dark" data-testid="button-copy-pix" onClick={() => void copyValue("pix", settings.pix_key)}>{copied === "pix" ? <><Check size={16}/> Copiado</> : <><Copy size={16}/> Copiar chave</>}</button></div> : <span className="pix-unavailable" data-testid="text-pix-unavailable">Chave Pix em breve</span>}{copied === "pix" && <span className="copy-confirm" data-testid="status-pix-copied">Chave Pix copiada</span>}</div></section>
+      {addressText && <section className="delivery-compact" id="entrega" data-testid="section-public-delivery"><div className="delivery-compact-inner"><div className="delivery-compact-heading"><span className="address-mark"><MapPin size={18}/></span><div><span className="eyebrow">PARA PRESENTES FÍSICOS</span><h2>Endereço para entrega</h2></div></div><p className="delivery-explanation" data-testid="text-delivery-explanation">Se você comprar um presente pela internet e quiser enviá-lo diretamente para nossa casa, utilize o endereço abaixo. Antes de finalizar o pedido, confira se a loja realiza entregas na região.</p><div className="address-box compact-address" data-testid="address-delivery"><p data-testid="text-public-address">{addressText}</p><button className="button button-outline" data-testid="button-copy-address" onClick={() => void copyValue("address", addressText)}>{copied === "address" ? <><Check size={15}/> Endereço copiado com sucesso!</> : <><Copy size={15}/> Copiar endereço</>}</button></div>{copied === "address" && <span className="copy-confirm" role="status" data-testid="status-address-copied">Endereço copiado com sucesso!</span>}{copyError?.kind === "address" && <span className="copy-error" role="alert" data-testid="status-address-copy-error">{copyError.message}</span>}</div></section>}
+       <section className="pix-section"><div className="pix-mark" aria-hidden="true"><span>G</span><i>&</i><span>A</span></div><div className="pix-copy"><span className="eyebrow">UM GESTO QUE VIRA LAR</span><h2>Prefere contribuir via Pix?</h2><p data-testid="text-pix-copy">{settings?.pix_text || pixFallback}</p>{settings?.pix_key ? <div className="pix-key-row"><span className="pix-key" data-testid="text-public-pix-key">{settings.pix_key}</span><button className="button button-dark" data-testid="button-copy-pix" onClick={() => void copyValue("pix", settings.pix_key)}>{copied === "pix" ? <><Check size={16}/> Copiado</> : <><Copy size={16}/> Copiar chave</>}</button></div> : <span className="pix-unavailable" data-testid="text-pix-unavailable">Chave Pix em breve</span>}{copied === "pix" && <span className="copy-confirm" data-testid="status-pix-copied">Chave Pix copiada</span>}{copyError?.kind === "pix" && <span className="copy-error" role="alert" data-testid="status-pix-copy-error">{copyError.message}</span>}</div></section>
       <footer className="site-footer"><a className="footer-brand" href="/" data-testid="link-footer-home"><Home size={15}/> Casa Nova</a><span data-testid="text-footer-hosts">Com carinho, Guilherme & Alice</span><a href="#inicio" data-testid="link-back-to-top" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Voltar ao início ↑</a></footer>
     </main>}
-  </div>;
+     {giftToConfirm && <div className="modal-backdrop" role="presentation" data-testid="dialog-mark-gift-backdrop"><div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="claim-gift-title" data-testid="dialog-mark-gift-purchased"><span className="claim-symbol"><Heart size={19}/></span><h2 id="claim-gift-title">Você confirma que já comprou este presente?</h2><p data-testid="text-claim-gift-name">“{giftToConfirm.name}”</p>{markPurchased.isPending && <p className="helper-text" role="status" data-testid="status-mark-gift-loading"><LoaderCircle className="spin" size={15}/> Registrando sua escolha...</p>}{markPurchased.isError && <div className="form-error" role="alert" data-testid="status-mark-gift-error">{markPurchased.error instanceof Error ? markPurchased.error.message : "Não foi possível registrar sua escolha. Tente novamente."}</div>}<div className="modal-actions"><button className="button button-outline" data-testid="button-cancel-mark-gift" disabled={markPurchased.isPending} onClick={() => setGiftToConfirm(null)}>Cancelar</button><button className="button button-dark" data-testid="button-confirm-mark-gift" disabled={markPurchased.isPending} onClick={() => void confirmPurchased()}>{markPurchased.isPending ? <><LoaderCircle className="spin" size={15}/> Registrando...</> : "Sim, já comprei"}</button></div></div></div>}
+   </div>;
 }
 
 function AdminRoute() {
@@ -104,7 +171,7 @@ function AdminDashboard({ email, onSignOut }: { email: string; onSignOut: () => 
   const settingsQuery = useAdminSettings(true);
   const gifts = giftsQuery.data ?? [];
   const available = gifts.filter(g => g.status === "available").length;
-  const fulfilled = gifts.filter(g => g.status === "fulfilled").length;
+  const purchased = gifts.filter(g => g.status === "purchased").length;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -132,33 +199,39 @@ function AdminDashboard({ email, onSignOut }: { email: string; onSignOut: () => 
   return <div className="admin-shell"><aside className="admin-sidebar"><a className="brand-mark" href="/" data-testid="link-admin-home"><span className="brand-icon"><Home size={17}/></span><span><b>Casa Nova</b><small>Guilherme & Alice</small></span></a><span className="sidebar-label">GERENCIAR</span><button className={`side-link ${tab === "gifts" ? "active" : ""}`} data-testid="button-tab-gifts" onClick={() => setTab("gifts")}><Heart size={17}/>Lista de presentes</button><button className={`side-link ${tab === "settings" ? "active" : ""}`} data-testid="button-tab-settings" onClick={() => setTab("settings")}><Settings2 size={17}/>Informações do site</button><div className="sidebar-bottom"><span className="admin-avatar" data-testid="text-admin-initials">GA</span><div className="admin-identity"><b data-testid="text-admin-identity">{email.split("@")[0]}</b><small>Anfitrião</small></div><button className="icon-button logout-button" data-testid="button-admin-signout" onClick={onSignOut} aria-label="Sair"><LogOut size={17}/></button></div></aside>
     <main className="admin-main"><div className="admin-topbar"><div className="crumb"><a href="/" data-testid="link-admin-crumb">Casa Nova</a><span>/</span><b data-testid="text-admin-current-section">{tab === "gifts" ? "Lista de presentes" : "Informações do site"}</b></div><a className="preview-link" href="/" target="_blank" rel="noreferrer" data-testid="link-preview-site">Ver convite <span>↗</span></a></div>
       {tab === "gifts" ? <div className="admin-content"><div className="admin-title-row"><div><span className="eyebrow">SEU NOVO LAR, NO SEU TEMPO</span><h1>Lista de presentes</h1><p>Cuide dos itens que vão compor a casa de vocês.</p></div><button className="button button-dark" data-testid="button-add-gift" onClick={() => setGiftModal("new")}><Plus size={17}/> Adicionar presente</button></div>
-        <div className="stat-strip"><div className="stat-item" data-testid="stat-total"><span>Total</span><b>{gifts.length}</b></div><div className="stat-item" data-testid="stat-available"><span>Disponível</span><b>{available}</b></div><div className="stat-item" data-testid="stat-fulfilled"><span>Comprados / recebidos</span><b>{fulfilled}</b></div></div>
-        <div className="admin-list-panel"><div className="list-toolbar"><label className="search-field admin-search"><Search size={16}/><input aria-label="Buscar item" data-testid="input-admin-search" placeholder="Buscar presente..." value={search} onChange={e => setSearch(e.target.value)}/></label><label className="compact-select"><select aria-label="Filtrar status" data-testid="select-admin-status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="all">Todos os status</option><option value="available">Disponível</option><option value="fulfilled">Comprado/Recebido</option></select><ChevronDown size={14}/></label><label className="compact-select"><select aria-label="Filtrar categoria" data-testid="select-admin-category" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}><option value="all">Todas as categorias</option>{categories.map(c => <option key={c}>{c}</option>)}</select><ChevronDown size={14}/></label></div>
-           {giftsQuery.isLoading ? <div className="admin-skeletons" data-testid="status-admin-gifts-loading">{[1,2,3].map(n => <div className="admin-skeleton" key={n}/>)}</div> : giftsQuery.isError ? <div className="empty-state"><h3>Não foi possível carregar os itens</h3><p data-testid="status-admin-gifts-error">{giftsQuery.error.message}</p><button className="button button-outline" data-testid="button-retry-admin-gifts" onClick={() => void giftsQuery.refetch()}>Tentar novamente</button></div> : !gifts.length ? <div className="empty-state" data-testid="state-admin-gifts-empty"><span className="empty-mark"><Home size={20}/></span><h3>Comece pela primeira escolha</h3><p>Adicione um presente para montar a lista do novo lar.</p><button className="button button-dark" data-testid="button-add-first-gift" onClick={() => setGiftModal("new")}><Plus size={16}/> Adicionar presente</button></div> : !visibleGifts.length ? <div className="empty-state" data-testid="state-admin-filtered-empty"><h3>Nenhum presente encontrado</h3><p>Ajuste os filtros para ver outros itens.</p><button className="text-button" data-testid="button-clear-admin-filters" onClick={() => {setSearch("");setStatusFilter("all");setCategoryFilter("all");}}>Limpar filtros</button></div> : <div className="gift-table-wrap"><table className="gift-table"><thead><tr><th>ITEM</th><th>CATEGORIA</th><th>VALOR SUGERIDO</th><th>STATUS</th><th className="actions-head">AÇÕES</th></tr></thead><tbody>{visibleGifts.map(gift => <tr key={gift.id} data-testid={`row-gift-${gift.id}`}><td><div className="table-gift"><div className="table-thumb">{gift.image_url ? <img src={gift.image_url} alt=""/> : <Home size={17}/>}</div><div><b data-testid={`text-gift-name-${gift.id}`}>{gift.name}</b>{gift.description && <small>{gift.description}</small>}</div></div></td><td>{gift.category || <span className="muted-dash">—</span>}</td><td>{gift.suggested_price != null ? gift.suggested_price.toLocaleString("pt-BR", {style:"currency",currency:"BRL"}) : <span className="muted-dash">—</span>}</td><td><button className={`status-pill ${gift.status}`} data-testid={`button-gift-status-${gift.id}`} onClick={() => setStatus.mutate({ id: gift.id, status: gift.status === "available" ? "fulfilled" : "available" })} title="Alterar status">{gift.status === "available" ? "Disponível" : "Comprado/Recebido"}</button></td><td><div className="row-actions"><button className="icon-button" data-testid={`button-move-gift-up-${gift.id}`} aria-label={`Mover ${gift.name} para cima`} disabled={gifts[0]?.id === gift.id} onClick={() => moveGift(gift, -1)}><ArrowUp size={16}/></button><button className="icon-button" data-testid={`button-move-gift-down-${gift.id}`} aria-label={`Mover ${gift.name} para baixo`} disabled={gifts[gifts.length - 1]?.id === gift.id} onClick={() => moveGift(gift, 1)}><ArrowDown size={16}/></button><button className="icon-button" data-testid={`button-edit-gift-${gift.id}`} aria-label={`Editar ${gift.name}`} onClick={() => setGiftModal(gift)}><Pencil size={16}/></button><button className="icon-button danger-icon" data-testid={`button-delete-gift-${gift.id}`} aria-label={`Excluir ${gift.name}`} onClick={() => setDeleteTarget(gift)}><Trash2 size={16}/></button></div></td></tr>)}</tbody></table></div>}
+         <div className="stat-strip"><div className="stat-item" data-testid="stat-total"><span>Total</span><b>{gifts.length}</b></div><div className="stat-item" data-testid="stat-available"><span>Disponível</span><b>{available}</b></div><div className="stat-item" data-testid="stat-purchased"><span>Comprados</span><b>{purchased}</b></div></div>
+         <div className="admin-list-panel"><div className="list-toolbar"><label className="search-field admin-search"><Search size={16}/><input aria-label="Buscar item" data-testid="input-admin-search" placeholder="Buscar presente..." value={search} onChange={e => setSearch(e.target.value)}/></label><label className="compact-select"><select aria-label="Filtrar status" data-testid="select-admin-status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="all">Todos os status</option><option value="available">Disponível</option><option value="purchased">Comprado</option></select><ChevronDown size={14}/></label><label className="compact-select"><select aria-label="Filtrar categoria" data-testid="select-admin-category" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}><option value="all">Todas as categorias</option>{categories.map(c => <option key={c}>{c}</option>)}</select><ChevronDown size={14}/></label></div>
+             {setStatus.isError && <div className="form-error" role="alert" data-testid="status-admin-gift-status-error">{setStatus.error instanceof Error ? setStatus.error.message : "Não foi possível alterar o status."}</div>}
+             {saveGift.isError && <div className="form-error" role="alert" data-testid="status-admin-gift-save-error">{saveGift.error instanceof Error ? saveGift.error.message : "Não foi possível salvar o presente."}</div>}
+            {giftsQuery.isLoading ? <div className="admin-skeletons" data-testid="status-admin-gifts-loading">{[1,2,3].map(n => <div className="admin-skeleton" key={n}/>)}</div> : giftsQuery.isError ? <div className="empty-state"><h3>Não foi possível carregar os itens</h3><p data-testid="status-admin-gifts-error">{giftsQuery.error.message}</p><button className="button button-outline" data-testid="button-retry-admin-gifts" onClick={() => void giftsQuery.refetch()}>Tentar novamente</button></div> : !gifts.length ? <div className="empty-state" data-testid="state-admin-gifts-empty"><span className="empty-mark"><Home size={20}/></span><h3>Comece pela primeira escolha</h3><p>Adicione um presente para montar a lista do novo lar.</p><button className="button button-dark" data-testid="button-add-first-gift" onClick={() => setGiftModal("new")}><Plus size={16}/> Adicionar presente</button></div> : !visibleGifts.length ? <div className="empty-state" data-testid="state-admin-filtered-empty"><h3>Nenhum presente encontrado</h3><p>Ajuste os filtros para ver outros itens.</p><button className="text-button" data-testid="button-clear-admin-filters" onClick={() => {setSearch("");setStatusFilter("all");setCategoryFilter("all");}}>Limpar filtros</button></div> : <div className="gift-table-wrap"><table className="gift-table"><thead><tr><th>ITEM</th><th>CATEGORIA</th><th>VALOR SUGERIDO</th><th>LINK DA LOJA</th><th>STATUS</th><th className="actions-head">AÇÕES</th></tr></thead><tbody>{visibleGifts.map(gift => {
+              const purchaseUrl = safeHttpsUrl(gift.purchase_url);
+               return <tr key={gift.id} data-testid={`row-gift-${gift.id}`}><td><div className="table-gift"><div className="table-thumb">{gift.image_url ? <img src={gift.image_url} alt=""/> : <Home size={17}/>}</div><div><b data-testid={`text-gift-name-${gift.id}`}>{gift.name}</b>{gift.description && <small>{gift.description}</small>}</div></div></td><td>{gift.category || <span className="muted-dash">—</span>}</td><td>{gift.suggested_price != null ? gift.suggested_price.toLocaleString("pt-BR", {style:"currency",currency:"BRL"}) : <span className="muted-dash">—</span>}</td><td>{purchaseUrl ? <a className="admin-store-link" href={purchaseUrl} title={purchaseUrl} target="_blank" rel="noopener noreferrer" data-testid={`link-admin-test-purchase-${gift.id}`}><span>{new URL(purchaseUrl).hostname}</span>Testar <ExternalLink size={12}/></a> : gift.purchase_url ? <span className="unsafe-link-label" data-testid={`text-admin-unsafe-purchase-${gift.id}`}>Link não seguro</span> : <span className="muted-dash">—</span>}</td><td><button className={`status-pill ${gift.status}`} data-testid={`button-gift-status-${gift.id}`} disabled={setStatus.isPending} onClick={() => setStatus.mutate({ id: gift.id, status: gift.status === "available" ? "purchased" : "available" })} title={gift.status === "purchased" ? "Tornar disponível novamente" : "Marcar como comprado"}>{setStatus.isPending && setStatus.variables?.id === gift.id ? "Salvando..." : gift.status === "available" ? "Disponível" : gift.purchased_by_guest ? "Comprado pelo convidado" : "Comprado"}</button></td><td><div className="row-actions"><button className="icon-button" data-testid={`button-move-gift-up-${gift.id}`} aria-label={`Mover ${gift.name} para cima`} disabled={gifts[0]?.id === gift.id} onClick={() => moveGift(gift, -1)}><ArrowUp size={16}/></button><button className="icon-button" data-testid={`button-move-gift-down-${gift.id}`} aria-label={`Mover ${gift.name} para baixo`} disabled={gifts[gifts.length - 1]?.id === gift.id} onClick={() => moveGift(gift, 1)}><ArrowDown size={16}/></button><button className="icon-button" data-testid={`button-edit-gift-${gift.id}`} aria-label={`Editar ${gift.name}`} onClick={() => setGiftModal(gift)}><Pencil size={16}/></button><button className="icon-button danger-icon" data-testid={`button-delete-gift-${gift.id}`} aria-label={`Excluir ${gift.name}`} onClick={() => setDeleteTarget(gift)}><Trash2 size={16}/></button></div></td></tr>;
+            })}</tbody></table></div>}
         </div><p className="admin-footnote">A lista pública mostra apenas presentes disponíveis.</p></div> : <SettingsEditor query={settingsQuery} />}
     </main>
-    {giftModal && <GiftEditor gift={giftModal === "new" ? null : giftModal} allGifts={gifts} onClose={() => setGiftModal(null)} onSave={(input, id) => saveGift.mutate({ input, id }, { onSuccess: () => setGiftModal(null) })} saving={saveGift.isPending}/>}
+     {giftModal && <GiftEditor gift={giftModal === "new" ? null : giftModal} allGifts={gifts} onClose={() => setGiftModal(null)} onSave={(input, id) => saveGift.mutate({ input, id }, { onSuccess: () => setGiftModal(null) })} saving={saveGift.isPending} saveError={saveGift.isError ? saveGift.error.message : null}/>}
     {deleteTarget && <div className="modal-backdrop" role="presentation"><div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" data-testid="dialog-delete-gift"><button className="modal-close" data-testid="button-close-delete-dialog" onClick={() => setDeleteTarget(null)} aria-label="Fechar"><X size={19}/></button><span className="delete-symbol"><Trash2 size={20}/></span><h2 id="delete-title">Excluir este presente?</h2><p data-testid="text-delete-gift-confirmation">“{deleteTarget.name}” será removido da lista. Esta ação não pode ser desfeita.</p>{deleteGift.isError && <div className="form-error" role="alert" data-testid="status-delete-gift-error">{deleteGift.error.message}</div>}<div className="modal-actions"><button className="button button-outline" data-testid="button-cancel-delete-gift" onClick={() => setDeleteTarget(null)}>Cancelar</button><button className="button button-danger" data-testid="button-confirm-delete-gift" disabled={deleteGift.isPending} onClick={() => deleteGift.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) })}>{deleteGift.isPending ? "Excluindo..." : "Excluir presente"}</button></div></div></div>}
   </div>;
 }
 
 function toGiftInput(gift: Gift): GiftInput {
-  return { name: gift.name, description: gift.description, image_url: gift.image_url, category: gift.category, suggested_price: gift.suggested_price, sort_order: gift.sort_order };
+  return { name: gift.name, description: gift.description, image_url: gift.image_url, purchase_url: gift.purchase_url, category: gift.category, suggested_price: gift.suggested_price, sort_order: gift.sort_order };
 }
 
 interface GiftEditorValues {
   name: string;
   description: string;
   image_url: string;
+  purchase_url: string;
   category: string;
   suggested_price: string;
   sort_order: number;
 }
 
-function GiftEditor({ gift, allGifts, onClose, onSave, saving }: { gift: Gift | null; allGifts: Gift[]; onClose: () => void; onSave: (input: GiftInput, id?: string) => void; saving: boolean }) {
+function GiftEditor({ gift, allGifts, onClose, onSave, saving, saveError }: { gift: Gift | null; allGifts: Gift[]; onClose: () => void; onSave: (input: GiftInput, id?: string) => void; saving: boolean; saveError: string | null }) {
   const upload = useUploadGiftPhoto();
   const form = useForm<GiftEditorValues>({ defaultValues: {
-    name: gift?.name || "", description: gift?.description || "", image_url: gift?.image_url || "",
+    name: gift?.name || "", description: gift?.description || "", image_url: gift?.image_url || "", purchase_url: gift?.purchase_url || "",
     category: gift?.category || "", suggested_price: gift?.suggested_price?.toString() || "",
     sort_order: gift?.sort_order ?? allGifts.length,
   } });
@@ -168,20 +241,27 @@ function GiftEditor({ gift, allGifts, onClose, onSave, saving }: { gift: Gift | 
       form.setError("suggested_price", { type: "validate", message: "Informe um valor válido." });
       return;
     }
+    const purchaseUrl = values.purchase_url.trim();
+    if (purchaseUrl && !safeHttpsUrl(purchaseUrl)) {
+      form.setError("purchase_url", { type: "validate", message: "Informe um link HTTPS válido, sem usuário ou senha." });
+      return;
+    }
     onSave({
       name: values.name.trim(), description: values.description.trim() || null,
-      image_url: values.image_url.trim() || null, category: values.category.trim() || null,
+      image_url: values.image_url.trim() || null, purchase_url: purchaseUrl || null, category: values.category.trim() || null,
       suggested_price: suggestedPrice, sort_order: Number(values.sort_order),
     }, gift?.id);
   });
   return <div className="modal-backdrop" role="presentation"><Form {...form}><form className="editor-modal" onSubmit={submit} aria-labelledby="gift-editor-title"><div className="modal-heading"><div><span className="eyebrow">LISTA DO NOVO LAR</span><h2 id="gift-editor-title">{gift ? "Editar presente" : "Adicionar presente"}</h2></div><button type="button" className="modal-close" data-testid="button-close-gift-editor" onClick={onClose} aria-label="Fechar"><X size={19}/></button></div>
     <label className="field-label">Nome do item<input data-testid="input-gift-name" required maxLength={120} placeholder="Ex.: Jogo de pratos" {...form.register("name", { required: "Informe o nome do item." })}/></label>
     <label className="field-label">Descrição<textarea data-testid="input-gift-description" rows={3} maxLength={500} placeholder="Um detalhe sobre esse item (opcional)" {...form.register("description")}/></label>
+     <label className="field-label">Link para comprar o presente<input data-testid="input-gift-purchase-url" type="url" inputMode="url" placeholder="https://loja.com/produto" {...form.register("purchase_url", { validate: value => !value.trim() || Boolean(safeHttpsUrl(value)) || "Informe um link HTTPS válido, sem usuário ou senha." })}/>{form.formState.errors.purchase_url && <small className="form-error" data-testid="status-gift-purchase-url-error">{form.formState.errors.purchase_url.message}</small>}<small className="helper-text">Opcional. Aceitamos apenas endereços HTTPS sem dados de acesso.</small></label>
     <div className="field-pair"><label className="field-label">Categoria<input data-testid="input-gift-category" placeholder="Ex.: Cozinha" {...form.register("category")}/></label><label className="field-label">Valor sugerido (R$)<input data-testid="input-gift-price" inputMode="decimal" placeholder="Opcional" {...form.register("suggested_price")}/>{form.formState.errors.suggested_price && <small className="form-error">{form.formState.errors.suggested_price.message}</small>}</label></div>
     <label className="field-label">Imagem do presente<div className="upload-row"><input data-testid="input-gift-image-url" placeholder="Cole o endereço da imagem" {...form.register("image_url")}/><label className="upload-button" data-testid="button-upload-gift-photo"><ImagePlus size={16}/> Enviar<input data-testid="input-upload-gift-photo" type="file" accept="image/*" hidden onChange={async e => {const file=e.target.files?.[0]; e.currentTarget.value=""; if (!file) return; try {const url=await upload.mutateAsync(file); form.setValue("image_url", url, { shouldDirty:true });} catch { /* React Query exposes upload error below. */ }}}/></label></div>{upload.isPending && <small className="helper-text" role="status" data-testid="status-gift-photo-upload">Enviando imagem...</small>}</label>
     <label className="field-label narrow-field">Ordem de exibição<input data-testid="input-gift-sort-order" type="number" min="0" step="1" {...form.register("sort_order", { valueAsNumber:true })}/></label>
     {upload.isError && <div className="form-error" role="alert" data-testid="status-gift-photo-error">{upload.error?.message || "Não foi possível enviar a imagem."}</div>}
-    <div className="modal-actions"><button type="button" className="button button-outline" data-testid="button-cancel-gift" onClick={onClose}>Cancelar</button><button type="submit" className="button button-dark" data-testid="button-save-gift" disabled={saving || upload.isPending}>{saving ? "Salvando..." : gift ? "Salvar alterações" : "Adicionar à lista"}</button></div>
+     {saveError && <div className="form-error" role="alert" data-testid="status-gift-save-error">{saveError}</div>}
+     <div className="modal-actions"><button type="button" className="button button-outline" data-testid="button-cancel-gift" onClick={onClose}>Cancelar</button><button type="submit" className="button button-dark" data-testid="button-save-gift" disabled={saving || upload.isPending}>{saving ? "Salvando..." : gift ? "Salvar alterações" : "Adicionar à lista"}</button></div>
   </form></Form></div>;
 }
 
