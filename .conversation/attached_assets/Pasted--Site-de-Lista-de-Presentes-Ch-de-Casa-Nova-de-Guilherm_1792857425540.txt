@@ -1,0 +1,248 @@
+# Site de Lista de Presentes — Chá de Casa Nova de Guilherme & Alice
+
+Desenvolva um site completo, funcional e responsivo para o chá de casa nova de Guilherme e Alice.
+
+O objetivo é criar uma lista online para que amigos e familiares possam visualizar os itens que os anfitriões desejam para o novo lar. Os convidados poderão consultar os presentes disponíveis, enquanto Guilherme e Alice terão um painel administrativo para cadastrar itens e marcar aqueles que já foram comprados ou recebidos, retirando-os automaticamente da lista pública.
+
+O site também deverá disponibilizar o endereço para entrega dos presentes e uma opção de contribuição via Pix.
+
+Quero uma aplicação simples, bonita e prática, sem funcionalidades desnecessárias. Não crie apenas um protótipo visual: implemente o banco de dados, a autenticação administrativa e o gerenciamento real dos presentes.
+
+## 1. Identidade visual
+
+Crie uma interface minimalista, elegante, acolhedora e moderna, com aparência de um site profissional de chá de casa nova.
+
+### Paleta de cores
+- Branco: `#FFFFFF` — fundo principal.
+- Off-white: `#FAF8F5` — fundos secundários.
+- Bege claro: `#F0E8DD` — detalhes e seções.
+- Bege médio: `#D8C8B5` — bordas e elementos secundários.
+- Marrom suave: `#8C7967` — botões e ícones.
+- Cinza escuro: `#49433D` — textos.
+
+Utilize fontes serifadas elegantes nos títulos e fontes modernas e legíveis nos textos. Os cards devem ser discretos, com bordas suaves e sombras quase imperceptíveis.
+
+O layout deve ter bastante espaço em branco, imagens bonitas de ambientes residenciais e objetos para casa, navegação simples e animações sutis.
+
+Evite cores vibrantes, gradientes exagerados, excesso de elementos decorativos e aparência infantil.
+
+O site deve funcionar perfeitamente em celulares, tablets e computadores.
+
+## 2. Página inicial
+
+Criar uma página inicial com uma apresentação calorosa e convidativa.
+
+Título principal:
+
+**Chá de Casa Nova**
+
+Subtítulo:
+
+**Guilherme & Alice**
+
+Texto de apresentação:
+
+“Um novo lar, muitas histórias para viver e uma alegria enorme em compartilhar esse momento com vocês! Preparamos uma lista de itens para nossa casa nova e ficaremos muito felizes com o carinho de cada um.”
+
+Adicionar um botão principal: **“Ver lista de presentes”**, que leve diretamente à lista.
+
+Criar uma seção curta chamada “Nosso novo lar”, com espaço para uma fotografia do casal ou da casa e um texto editável pelo administrador.
+
+Não utilizar linguagem de cerimônia de casamento, votos ou celebração matrimonial. O foco deve ser exclusivamente o chá de casa nova e a montagem do novo lar.
+
+## 3. Lista de presentes
+
+Criar uma seção central com o título “Nossa lista de presentes”.
+
+Exibir os presentes disponíveis em cards contendo:
+- Fotografia do produto.
+- Nome do item.
+- Descrição opcional.
+- Categoria opcional.
+- Valor sugerido opcional.
+
+Sugestões de categorias:
+- Cozinha.
+- Eletrodomésticos.
+- Sala.
+- Quarto.
+- Banheiro.
+- Lavanderia.
+- Organização.
+- Decoração.
+- Outros.
+
+O administrador deverá poder cadastrar qualquer tipo de presente, sem ficar limitado às categorias sugeridas.
+
+Adicionar pesquisa por nome e filtros por categoria, mantendo a interface simples.
+
+Não implementar carrinho de compras, checkout, pagamento com cartão ou integração com lojas externas.
+
+## 4. Marcação de presentes comprados ou recebidos
+
+Esta é uma das funcionalidades mais importantes do projeto.
+
+O administrador deve conseguir marcar manualmente cada presente como comprado ou recebido.
+
+No painel administrativo, cada item deve possuir um botão para alterar seu status:
+
+- **Disponível**
+- **Comprado/Recebido**
+
+Quando Guilherme ou Alice marcar um presente como comprado ou recebido:
+
+1. O status deverá ser atualizado no banco de dados.
+2. O item deverá desaparecer automaticamente da lista pública.
+3. O item não deverá voltar a aparecer após atualizar a página ou acessar o site por outro dispositivo.
+4. O painel administrativo deverá continuar mostrando o item, identificado como comprado ou recebido.
+5. O administrador poderá clicar em “Tornar disponível novamente” caso tenha marcado o item incorretamente.
+
+Somente presentes disponíveis devem aparecer para os convidados.
+
+A marcação será feita manualmente pelos anfitriões. Não é necessário confirmar compras automaticamente com lojas.
+
+**Importante:** não confundir a marcação de um presente com um sistema de reservas. O funcionamento desejado é simples: o convidado compra o item por conta própria, e Guilherme ou Alice acessa o painel para marcar o presente como comprado ou recebido. Assim, o item deixa de aparecer para os demais convidados.
+
+## 5. Painel administrativo
+
+Criar uma área administrativa acessível por uma rota como `/admin`, protegida por autenticação.
+
+Somente os usuários autorizados poderão acessar o painel.
+
+O painel deverá seguir o mesmo visual minimalista em branco e bege, com navegação intuitiva.
+
+### Gerenciamento de presentes
+
+Permitir que o administrador:
+- Faça login com e-mail e senha.
+- Cadastre novos presentes.
+- Edite nome, descrição, imagem, categoria e valor sugerido.
+- Exclua presentes, solicitando confirmação antes da exclusão.
+- Marque itens como comprados ou recebidos.
+- Torne itens disponíveis novamente.
+- Consulte todos os presentes, inclusive os que não aparecem mais publicamente.
+- Pesquise por nome.
+- Filtre por categoria e status.
+- Altere a ordem de exibição dos itens.
+
+### Resumo administrativo
+
+Exibir apenas três indicadores simples:
+- Total de presentes cadastrados.
+- Presentes disponíveis.
+- Presentes comprados ou recebidos.
+
+Não criar relatórios complexos, gráficos financeiros ou funcionalidades desnecessárias.
+
+### Configurações do site
+
+Permitir a edição de:
+- Nome dos anfitriões.
+- Título e texto de apresentação.
+- Fotografias.
+- Data do chá de casa nova.
+- Endereço para entrega.
+- Exibição pública do endereço.
+- Chave Pix.
+- Texto da seção Pix.
+
+## 6. Endereço para entrega
+
+Criar uma seção chamada “Como entregar seu presente”.
+
+Texto sugerido:
+
+“Se você escolher um presente físico, aqui estão as informações para a entrega no nosso novo lar.”
+
+Disponibilizar os seguintes campos para configuração pelo administrador:
+- CEP.
+- Rua.
+- Número.
+- Complemento.
+- Bairro.
+- Cidade.
+- Estado.
+- Referência opcional.
+
+Adicionar um botão “Copiar endereço” para facilitar a utilização pelos convidados.
+
+O endereço deverá permanecer oculto até que o administrador o cadastre e habilite sua exibição pública.
+
+Não inventar endereço ou informações pessoais.
+
+## 7. Opção de Pix
+
+Criar uma seção discreta chamada “Prefere contribuir via Pix?”.
+
+Texto sugerido:
+
+“Se preferir, você também pode nos presentear com uma contribuição para ajudar a montar nosso novo lar. Agradecemos muito pelo carinho!”
+
+Chave Pix:
+
+**guilhenriquesilva10@gmail.com**
+
+Adicionar um botão “Copiar chave Pix”, que copie a chave para a área de transferência e exiba uma confirmação visual.
+
+Permitir que o administrador altere a chave e o texto da seção.
+
+Não implementar pagamentos dentro do site, checkout ou confirmação automática de transações. Não criar QR Code fictício.
+
+## 8. Banco de dados e segurança
+
+Utilizar Supabase para banco de dados, autenticação e armazenamento de imagens.
+
+Criar uma tabela de presentes com campos como:
+- `id`
+- `nome`
+- `descricao`
+- `imagem_url`
+- `categoria`
+- `valor_sugerido`
+- `status`
+- `ordem`
+- `created_at`
+- `updated_at`
+
+Criar também uma tabela para as configurações do site.
+
+As informações deverão permanecer salvas após atualizar a página ou acessar o sistema de outro dispositivo.
+
+Implementar autenticação administrativa segura e políticas de acesso RLS.
+
+Somente administradores autorizados poderão cadastrar, editar, excluir ou alterar o status dos presentes.
+
+Não expor credenciais privilegiadas no frontend e não utilizar uma senha administrativa fixa no código.
+
+## 9. Tecnologias e implementação
+
+Utilizar tecnologias modernas e compatíveis com a Lovable:
+- React.
+- TypeScript.
+- Tailwind CSS.
+- shadcn/ui, quando necessário.
+- Lucide React para ícones.
+- Supabase para persistência, autenticação e armazenamento de imagens.
+
+Manter o código organizado, os componentes reutilizáveis e as regras de negócio separadas da interface.
+
+Garantir acessibilidade básica, carregamento rápido, imagens otimizadas, responsividade, mensagens de erro e confirmação das ações administrativas.
+
+## 10. Critérios de conclusão
+
+Antes de finalizar, verificar se:
+
+1. A página pública está funcionando.
+2. O administrador consegue entrar com segurança.
+3. É possível cadastrar, editar e excluir presentes.
+4. É possível marcar presentes como comprados ou recebidos.
+5. Os itens marcados desaparecem da lista pública automaticamente.
+6. Os itens podem voltar a ficar disponíveis pelo painel.
+7. As alterações ficam salvas no banco de dados.
+8. O endereço pode ser configurado e copiado.
+9. A chave Pix pode ser copiada com um clique.
+10. O site funciona corretamente em dispositivos móveis.
+
+Entregue um site de chá de casa nova bonito, minimalista, acolhedor e funcional, que seja fácil de compartilhar com amigos e familiares e simples de administrar por Guilherme e Alice.
+
+**Prioridade máxima:** manter o projeto simples e funcional. Não adicionar recursos que não foram solicitados. O foco é apresentar a lista de presentes, permitir o gerenciamento administrativo e facilitar o compartilhamento das informações do novo lar.
