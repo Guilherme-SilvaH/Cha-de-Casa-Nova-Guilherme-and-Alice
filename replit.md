@@ -1,44 +1,50 @@
-# [Project name]
+# Chá de Casa Nova — Guilherme & Alice
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Site de lista de presentes para o chá de casa nova, com convite público e gerenciamento administrativo conectado ao Supabase.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/casa-nova-lista run dev` — run the website
+- `pnpm --filter @workspace/casa-nova-lista run typecheck` — typecheck the website
+- `pnpm --filter @workspace/casa-nova-lista run build` — build the website
+- Supabase schema, RLS, first-admin setup, and required environment variables: `artifacts/casa-nova-lista/SUPABASE_SETUP.md`
+- Required environment: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Frontend: React, Vite, Tailwind CSS, Wouter, TanStack Query
+- Persistence, email/password authentication, and image storage: Supabase
+- Browser uses only the public Supabase anon key; row-level security restricts administration
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/casa-nova-lista/src/App.tsx` — public invitation and admin interface
+- `artifacts/casa-nova-lista/src/lib/housewarming-api.ts` — Supabase queries, mutations, and React Query hooks
+- `artifacts/casa-nova-lista/src/lib/housewarming-types.ts` — gift and settings types
+- `artifacts/casa-nova-lista/supabase/setup.sql` — tables, RPC, storage bucket, and RLS policies
+- `artifacts/casa-nova-lista/SUPABASE_SETUP.md` — Supabase setup and first-admin guide
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Public settings use a safe RPC so a hidden delivery address is not exposed in the browser response.
+- Fulfilled gifts remain in Supabase and the admin panel; public queries only include available gifts.
+- Admin access is controlled by the `public.admin_users` email allowlist and Supabase RLS.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Public invite with searchable/filterable gifts, delivery details, and a copyable Pix key.
+- Admin login with gift management, status changes, ordering, summary counts, and editable site settings.
+- This is exclusively a housewarming list, not a wedding site. Do not invent an address; keep it hidden until configured and enabled.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Keep the site simple and functional; do not add checkout, reservations, payment processing, or store integrations.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Run `supabase/setup.sql` in the connected Supabase project's SQL Editor and add each administrator to `public.admin_users` before using `/admin`.
+- Do not put a Supabase `service_role` key in this frontend.
 
 ## Pointers
 

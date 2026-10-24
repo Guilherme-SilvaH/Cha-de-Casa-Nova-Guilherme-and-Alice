@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Chá de Casa Nova — Guilherme & Alice"
+description = "Site público de lista de presentes para o chá de casa nova de Guilherme e Alice, com administração protegida por login, atualização de itens, endereço configurável e contribuição via Pix."
+version = "1.0.0"
+id = "artifacts/casa-nova-lista"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24906
+
+[services.development]
+run = "pnpm --filter @workspace/casa-nova-lista run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/casa-nova-lista", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/casa-nova-lista/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24906"
+BASE_PATH = "/"
